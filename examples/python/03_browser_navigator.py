@@ -11,7 +11,11 @@ Use case: Web research, data gathering, automated browsing
 """
 
 from computer_use_agent import ComputerUseAgent
+from computer_use_agent.utils import setup_logging
 import os
+
+# Setup logging to see what the agent is doing
+setup_logging(level="INFO")
 
 api_key = os.getenv("ANTHROPIC_API_KEY")
 if not api_key:
@@ -25,6 +29,7 @@ print("=" * 60)
 agent = ComputerUseAgent(
     api_key=api_key,
     model="claude-sonnet-4-20250514",
+    verbose=True,  # Enable verbose logging
 )
 
 # Navigation task

@@ -10,7 +10,11 @@ Use case: Opening an application or clicking a button
 """
 
 from computer_use_agent import ComputerUseAgent
+from computer_use_agent.utils import setup_logging
 import os
+
+# Setup logging to see what the agent is doing
+setup_logging(level="INFO")
 
 # Get API key from environment
 api_key = os.getenv("ANTHROPIC_API_KEY")
@@ -26,6 +30,7 @@ print("=" * 60)
 agent = ComputerUseAgent(
     api_key=api_key,
     model="claude-sonnet-4-20250514",
+    verbose=True,  # Enable verbose logging
 )
 
 # Give the agent a simple goal

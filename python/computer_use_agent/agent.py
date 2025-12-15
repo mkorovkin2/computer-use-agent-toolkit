@@ -3,6 +3,7 @@ Main agent class that orchestrates the computer use agent loop.
 """
 
 import time
+import logging
 from typing import Any, Callable, Dict, Iterator, List, Optional
 from anthropic import Anthropic
 
@@ -21,6 +22,9 @@ from computer_use_agent.types import (
     ScrollDirection,
 )
 
+# Setup logger
+logger = logging.getLogger(__name__)
+
 
 class ComputerUseAgent:
     """
@@ -36,6 +40,7 @@ class ComputerUseAgent:
         safety_delay: float = 0.1,
         confirmation_mode: str = "auto",
         max_tokens: int = 4096,
+        verbose: bool = True,
     ):
         """
         Initialize the computer use agent.
@@ -48,10 +53,12 @@ class ComputerUseAgent:
             safety_delay: Delay after each action.
             confirmation_mode: 'auto', 'confirm', or 'dry-run'.
             max_tokens: Maximum tokens for Claude responses.
+            verbose: Enable verbose logging.
         """
         self.api_key = api_key
         self.model = model
         self.max_tokens = max_tokens
+        self.verbose = verbose
         
         # Initialize components
         self.client = Anthropic(api_key=api_key)
@@ -70,6 +77,9 @@ class ComputerUseAgent:
         
         # Get screen size for tool definition
         self.screen_width, self.screen_height = self.screen.get_screen_size()
+        
+        if self.verbose:
+            logger.info(f"🤖 Agent initialized with model: {model}")
     
     @property
     def state(self) -> Dict[str, Any]:
@@ -163,12 +173,18 @@ class ComputerUseAgent:
     
     def _take_screenshot(self) -> str:
         """Take a screenshot and return as base64."""
+        if self.verbose:
+            logger.info("📸 Taking screenshot...")
+        
         self.hooks.trigger_before_screenshot(self.context)
         
         image_b64 = self.screen.capture_base64()
         self.context.last_screenshot = image_b64
         
         self.hooks.trigger_after_screenshot(self.context, image_b64)
+        
+        if self.verbose:
+            logger.info(f"✓ Screenshot captured ({len(image_b64)} bytes)")
         
         return image_b64
     
@@ -312,10 +328,19 @@ class ComputerUseAgent:
         
         for iteration in range(max_iterations):
             self.context.iteration = iteration
+            
+            if self.verbose:
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🔄 Iteration {iteration + 1}/{max_iterations}")
+                logger.info(f"{'='*60}")
+            
             self.hooks.trigger_on_iteration_start(self.context, iteration)
             
             try:
                 # Call Claude
+                if self.verbose:
+                    logger.info("🧠 Calling Claude API...")
+                
                 response = self.client.messages.create(
                     model=self.model,
                     max_tokens=self.max_tokens,
@@ -330,8 +355,18 @@ class ComputerUseAgent:
                     "content": response.content,
                 })
                 
+                if self.verbose:
+                    logger.info(f"✓ Claude responded (stop_reason: {response.stop_reason})")
+                    # Log reasoning if present
+                    for block in response.content:
+                        if hasattr(block, "text") and block.text:
+                            logger.info(f"💭 Reasoning: {block.text[:150]}...")
+                            break
+                
                 # Check if done
                 if response.stop_reason == "end_turn":
+                    if self.verbose:
+                        logger.info("✓ Agent completed successfully!")
                     self.hooks.trigger_on_iteration_end(self.context, iteration)
                     break
                 
@@ -341,8 +376,16 @@ class ComputerUseAgent:
                     
                     for block in response.content:
                         if block.type == "tool_use":
+                            if self.verbose:
+                                logger.info(f"⚡ Executing tool: {block.name}")
+                                logger.info(f"   Args: {block.input}")
+                            
                             result = self._execute_tool(block.name, block.input)
                             self.context.action_history.append(result)
+                            
+                            if self.verbose:
+                                status = "✓" if result.success else "✗"
+                                logger.info(f"{status} Tool result: {result.success}")
                             
                             # Build tool result
                             tool_result_content = []
